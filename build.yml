@@ -1,0 +1,337 @@
+name: Build Cable Box app
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Android SDK pieces
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" > /dev/null || true
+      - name: Write the app files
+        run: |
+          mkdir -p app/src/main/java/com/cablebox/tv app/src/main/res/drawable
+          cat > settings.gradle << 'CABLEEOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "CableBox"
+          include ':app'
+          CABLEEOF
+          cat > build.gradle << 'CABLEEOF'
+          plugins {
+              id 'com.android.application' version '8.5.2' apply false
+          }
+          CABLEEOF
+          cat > gradle.properties << 'CABLEEOF'
+          org.gradle.jvmargs=-Xmx2g
+          android.nonTransitiveRClass=true
+          CABLEEOF
+          cat > app/build.gradle << 'CABLEEOF'
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.cablebox.tv'
+              compileSdk 34
+
+              defaultConfig {
+                  applicationId 'com.cablebox.tv'
+                  minSdk 21
+                  targetSdk 33
+                  versionCode 1
+                  versionName '1.0'
+              }
+
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                  }
+              }
+
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+          CABLEEOF
+          cat > app/src/main/AndroidManifest.xml << 'CABLEEOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+              <uses-feature android:name="android.software.leanback" android:required="false" />
+              <application
+                  android:label="Cable Box"
+                  android:icon="@drawable/ic_launcher"
+                  android:banner="@drawable/banner"
+                  android:usesCleartextTraffic="true"
+                  android:hardwareAccelerated="true"
+                  android:allowBackup="false"
+                  android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:screenOrientation="landscape"
+                      android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation|uiMode|screenLayout|smallestScreenSize">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                          <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          CABLEEOF
+          cat > app/src/main/res/drawable/banner.xml << 'CABLEEOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="320dp"
+              android:height="180dp"
+              android:viewportWidth="320"
+              android:viewportHeight="180">
+              <path android:fillColor="#1B4FB8" android:pathData="M0,0h320v180h-320z" />
+              <path android:fillColor="#0B2A6B" android:strokeColor="#FFFFFF" android:strokeWidth="6"
+                  android:pathData="M110,45h100a10,10 0 0 1 10,10v70a10,10 0 0 1 -10,10h-100a10,10 0 0 1 -10,-10v-70a10,10 0 0 1 10,-10z" />
+              <path android:fillColor="#FFA31A" android:pathData="M148,72L148,108L186,90z" />
+              <path android:fillColor="#FFFFFF" android:pathData="M130,142h60v6h-60z" />
+          </vector>
+          CABLEEOF
+          cat > app/src/main/res/drawable/ic_launcher.xml << 'CABLEEOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="96dp"
+              android:height="96dp"
+              android:viewportWidth="100"
+              android:viewportHeight="100">
+              <path android:fillColor="#1B4FB8" android:pathData="M0,0h100v100h-100z" />
+              <path android:fillColor="#0B2A6B" android:strokeColor="#FFFFFF" android:strokeWidth="4"
+                  android:pathData="M24,32h52a6,6 0 0 1 6,6v26a6,6 0 0 1 -6,6h-52a6,6 0 0 1 -6,-6v-26a6,6 0 0 1 6,-6z" />
+              <path android:fillColor="#FFA31A" android:pathData="M44,41L44,61L62,51z" />
+              <path android:fillColor="#FFFFFF" android:pathData="M36,74h28v4h-28z" />
+          </vector>
+          CABLEEOF
+          cat > app/src/main/java/com/cablebox/tv/MainActivity.java << 'CABLEEOF'
+          package com.cablebox.tv;
+
+          import android.app.Activity;
+          import android.app.AlertDialog;
+          import android.content.SharedPreferences;
+          import android.graphics.Color;
+          import android.os.Bundle;
+          import android.os.Handler;
+          import android.text.InputType;
+          import android.view.KeyEvent;
+          import android.view.View;
+          import android.view.WindowManager;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import android.widget.EditText;
+
+          public class MainActivity extends Activity {
+              private WebView web;
+              private final Handler handler = new Handler();
+              private String url = "";
+              private boolean dialogOpen = false;
+              private boolean paused = false;
+
+              private final Runnable retry = new Runnable() {
+                  @Override public void run() {
+                      if (url.length() > 0 && !dialogOpen) web.loadUrl(url);
+                  }
+              };
+
+              @Override
+              protected void onCreate(Bundle b) {
+                  super.onCreate(b);
+                  getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                  web = new WebView(this);
+                  web.setBackgroundColor(Color.BLACK);
+                  setContentView(web);
+                  WebSettings s = web.getSettings();
+                  s.setJavaScriptEnabled(true);
+                  s.setDomStorageEnabled(true);
+                  s.setMediaPlaybackRequiresUserGesture(false);
+                  web.setWebViewClient(new WebViewClient() {
+                      @Override
+                      public void onPageFinished(WebView v, String u) {
+                          if (u != null && u.startsWith("http")) {
+                              v.evaluateJavascript("(function(){var g=document.getElementById('go');if(g&&g.style.display!=='none'&&typeof start==='function'){start();}})()", null);
+                          }
+                      }
+                      @Override
+                      @SuppressWarnings("deprecation")
+                      public void onReceivedError(WebView v, int code, String desc, String failing) {
+                          offline();
+                      }
+                  });
+                  SharedPreferences p = getSharedPreferences("box", MODE_PRIVATE);
+                  url = p.getString("url", "");
+                  if (url.length() == 0) ask(); else web.loadUrl(url);
+              }
+
+              private void offline() {
+                  String html = "<html><body style='background:#061a4d;color:#fff;font-family:sans-serif;text-align:center;padding-top:20vh'>"
+                      + "<h1>Cable box not found</h1>"
+                      + "<p>Make sure the phone is on and the box is running.<br>Trying again in a few seconds.<br>Press MENU to change the address.</p>"
+                      + "</body></html>";
+                  web.loadData(html, "text/html", "utf-8");
+                  handler.removeCallbacks(retry);
+                  handler.postDelayed(retry, 5000);
+              }
+
+              private void ask() {
+                  if (dialogOpen) return;
+                  dialogOpen = true;
+                  final EditText t = new EditText(this);
+                  t.setSingleLine(true);
+                  t.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+                  t.setText(url.length() == 0 ? "10.0.0.220:8081" : url);
+                  AlertDialog.Builder d = new AlertDialog.Builder(this);
+                  d.setTitle("Cable box address");
+                  d.setMessage("Your phone's address and port, like 10.0.0.220:8081");
+                  d.setView(t);
+                  d.setCancelable(false);
+                  d.setPositiveButton("Save", new android.content.DialogInterface.OnClickListener() {
+                      @Override public void onClick(android.content.DialogInterface di, int w) {
+                          String v = t.getText().toString().trim();
+                          if (!v.startsWith("http")) v = "http://" + v;
+                          if (v.indexOf('/', 8) < 0) v = v + "/tv";
+                          url = v;
+                          getSharedPreferences("box", MODE_PRIVATE).edit().putString("url", v).apply();
+                          web.loadUrl(v);
+                      }
+                  });
+                  if (url.length() > 0) {
+                      d.setNegativeButton("Cancel", new android.content.DialogInterface.OnClickListener() {
+                          @Override public void onClick(android.content.DialogInterface di, int w) {
+                              web.loadUrl(url);
+                          }
+                      });
+                  }
+                  d.setOnDismissListener(new android.content.DialogInterface.OnDismissListener() {
+                      @Override public void onDismiss(android.content.DialogInterface di) {
+                          dialogOpen = false;
+                      }
+                  });
+                  d.show();
+              }
+
+              private String keyName(int c) {
+                  switch (c) {
+                      case KeyEvent.KEYCODE_DPAD_UP: return "ArrowUp";
+                      case KeyEvent.KEYCODE_DPAD_DOWN: return "ArrowDown";
+                      case KeyEvent.KEYCODE_DPAD_LEFT: return "ArrowLeft";
+                      case KeyEvent.KEYCODE_DPAD_RIGHT: return "ArrowRight";
+                      case KeyEvent.KEYCODE_DPAD_CENTER:
+                      case KeyEvent.KEYCODE_ENTER: return "Enter";
+                      case KeyEvent.KEYCODE_MEDIA_REWIND: return "MediaRewind";
+                      case KeyEvent.KEYCODE_MEDIA_PREVIOUS: return "MediaTrackPrevious";
+                      case KeyEvent.KEYCODE_CHANNEL_UP:
+                      case KeyEvent.KEYCODE_PAGE_UP: return "PageUp";
+                      case KeyEvent.KEYCODE_CHANNEL_DOWN:
+                      case KeyEvent.KEYCODE_PAGE_DOWN: return "PageDown";
+                      default: return null;
+                  }
+              }
+
+              @Override
+              public boolean dispatchKeyEvent(KeyEvent e) {
+                  if (dialogOpen) return super.dispatchKeyEvent(e);
+                  int c = e.getKeyCode();
+                  if (c == KeyEvent.KEYCODE_MENU) {
+                      if (e.getAction() == KeyEvent.ACTION_DOWN) ask();
+                      return true;
+                  }
+                  String k = keyName(c);
+                  if (k != null) {
+                      if (e.getAction() == KeyEvent.ACTION_DOWN) {
+                          web.evaluateJavascript("document.dispatchEvent(new KeyboardEvent('keydown',{key:'" + k + "',bubbles:true,cancelable:true}))", null);
+                      }
+                      return true;
+                  }
+                  return super.dispatchKeyEvent(e);
+              }
+
+              @Override
+              public void onBackPressed() {
+                  web.evaluateJavascript("(typeof gOpen!=='undefined'&&gOpen)?'1':'0'", new android.webkit.ValueCallback<String>() {
+                      @Override public void onReceiveValue(String v) {
+                          if ("\"1\"".equals(v)) {
+                              web.evaluateJavascript("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))", null);
+                          } else {
+                              finish();
+                          }
+                      }
+                  });
+              }
+
+              @Override
+              public void onWindowFocusChanged(boolean hasFocus) {
+                  super.onWindowFocusChanged(hasFocus);
+                  if (hasFocus) {
+                      web.setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN
+                          | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                          | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                          | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                          | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                          | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+                  }
+              }
+
+              @Override
+              protected void onPause() {
+                  super.onPause();
+                  paused = true;
+                  web.onPause();
+              }
+
+              @Override
+              protected void onResume() {
+                  super.onResume();
+                  if (paused) {
+                      paused = false;
+                      web.onResume();
+                      if (url.length() > 0 && !dialogOpen) web.loadUrl(url);
+                  }
+              }
+
+              @Override
+              protected void onDestroy() {
+                  handler.removeCallbacks(retry);
+                  web.destroy();
+                  super.onDestroy();
+              }
+          }
+          CABLEEOF
+      - name: Build
+        run: gradle assembleDebug --no-daemon
+      - name: Publish the app
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk cablebox.apk
+          gh release create "v${{ github.run_number }}" cablebox.apk --repo "${{ github.repository }}" --title "Cable Box v${{ github.run_number }}" --notes "Fire Stick app" --latest
